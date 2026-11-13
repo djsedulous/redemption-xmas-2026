@@ -173,6 +173,8 @@
   }
   .event-line { margin: 0 0 12px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
   .event-line .ev-title { font-weight: 800; }
+  .event-line .ev-where { flex-basis: 100%; color: var(--muted); font-size: 15px; }
+  .event-line .ev-where a { color: var(--primary); font-weight: 700; text-decoration: none; }
   .event-line .ev-when {
     background: var(--sun); color: #1D2748; font-weight: 800; font-size: 15px;
     border-radius: 10px; padding: 2px 10px;
@@ -193,7 +195,7 @@
   <!-- Вхід за ПІН -->
   <section id="pinView" hidden>
     <h1>Відмітка приходу</h1>
-    <p class="event-line" hidden><span class="ev-title"></span><span class="ev-when"></span></p>
+    <p class="event-line" hidden><span class="ev-title"></span><span class="ev-when"></span><span class="ev-where"></span></p>
     <p class="muted">Ця сторінка для працівників. Якщо ви батьки — покажіть QR-код на вході.</p>
     <form id="pinForm" class="row">
       <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="ПІН працівника" aria-label="ПІН працівника">
@@ -205,7 +207,7 @@
   <!-- Робочий екран -->
   <section id="workView" hidden>
     <h1>Відмітка приходу</h1>
-    <p class="event-line" hidden><span class="ev-title"></span><span class="ev-when"></span></p>
+    <p class="event-line" hidden><span class="ev-title"></span><span class="ev-when"></span><span class="ev-where"></span></p>
 
     <button class="primary wide" id="scanBtn" type="button">Сканувати QR</button>
 
@@ -600,7 +602,18 @@
         p.querySelector('.ev-title').textContent = ev.title || '';
         const w = p.querySelector('.ev-when');
         w.textContent = when; w.hidden = !when;
-        p.hidden = !(ev.title || when);
+        const where = [ev.place, ev.address].filter(Boolean).join(', ');
+        const wh = p.querySelector('.ev-where');
+        wh.textContent = '';
+        if (where) {
+          const a = document.createElement('a');
+          a.textContent = where;
+          a.href = ev.map || ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(where));
+          a.target = '_blank'; a.rel = 'noopener';
+          wh.append(a);
+        }
+        wh.hidden = !where;
+        p.hidden = !(ev.title || when || where);
         replay(p, 'enter');
       });
       if (ev.title) document.title = 'Відмітка приходу: ' + ev.title;
