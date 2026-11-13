@@ -314,7 +314,8 @@
         <summary>Адміністрування</summary>
 
         <h3>Ліміт місць</h3>
-        <p class="hint">Порожньо — без ліміту, 0 — реєстрацію закрито.</p>
+        <p class="hint">Порожньо — без ліміту, 0 — реєстрацію закрито.<br>
+          <span id="limitWhere"></span></p>
         <form class="row" id="limitForm">
           <input id="limitInput" type="number" min="0" step="1" inputmode="numeric" placeholder="без ліміту" aria-label="Ліміт місць">
           <button class="primary" type="submit" id="limitBtn">Зберегти</button>
@@ -489,6 +490,7 @@
     $('stLeftBox').classList.toggle('none', s.left === 0);
     $('stBar').style.width = (s.registered ? Math.round(s.arrived / s.registered * 100) : 0) + '%';
     if (first) replay($('stats'), 'enter');
+    if (s.limitSheet) $('limitWhere').textContent = 'Зберігається у вкладці «' + s.limitSheet + '», клітинка B1.';
     const li = $('limitInput');
     if (document.activeElement !== li) li.value = s.limit === null ? '' : s.limit;
   }
