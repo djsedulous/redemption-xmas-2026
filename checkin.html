@@ -179,6 +179,61 @@
     background: var(--sun); color: #1D2748; font-weight: 800; font-size: 15px;
     border-radius: 10px; padding: 2px 10px;
   }
+  /* Статистика */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 6px; }
+  .stat {
+    background: var(--bg); border-radius: 14px; padding: 10px 8px; text-align: center;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .stat b { font-size: 24px; line-height: 1.1; font-weight: 800; }
+  .stat b small { font-size: 15px; color: var(--muted); font-weight: 700; }
+  .stat span { font-size: 13px; color: var(--muted); font-weight: 700; }
+  .stat.ok b { color: var(--ok); }
+  .stat.none b { color: var(--error); }
+  .progress { height: 8px; border-radius: 99px; background: var(--bg); overflow: hidden; margin: 0 0 14px; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--ok); border-radius: 99px; transition: width .5s ease; }
+  .role {
+    display: inline-block; font-size: 13px; font-weight: 800; padding: 2px 10px; border-radius: 99px;
+    background: var(--sun); color: #1D2748; vertical-align: middle; margin-left: 8px;
+  }
+
+  /* Видалення дитини */
+  .kid-wrap { display: flex; gap: 8px; align-items: stretch; margin-bottom: 10px; }
+  .kid-wrap label.kid { flex: 1; margin-bottom: 0; }
+  .del-btn {
+    flex: 0 0 52px; display: grid; place-items: center;
+    border: 2px solid var(--line); background: var(--surface); color: var(--error); border-radius: 16px;
+  }
+  .del-btn:hover { border-color: var(--error); }
+  .del-btn svg { width: 22px; height: 22px; }
+
+  /* Адміністрування */
+  .admin { margin-top: 26px; border: 2px solid var(--line); border-radius: 18px; padding: 4px 16px; }
+  .admin summary { cursor: pointer; font-weight: 800; font-size: 18px; padding: 12px 0; list-style: none; }
+  .admin summary::-webkit-details-marker { display: none; }
+  .admin summary::after { content: '▾'; float: right; color: var(--muted); transition: transform .2s; }
+  .admin details[open] summary::after { transform: rotate(180deg); }
+  .admin h3 { font-size: 17px; margin: 14px 0 4px; }
+  .admin .hint { color: var(--muted); font-size: 14px; margin: 0 0 8px; }
+  .admin .stack { display: grid; gap: 8px; margin-top: 8px; }
+  .admin hr { border: 0; border-top: 2px dashed var(--line); margin: 18px 0 4px; }
+  .danger { border: 0; background: var(--error); color: #FFFFFF; padding: 14px 18px; }
+
+  /* Вікно підтвердження */
+  @keyframes dialogIn { from { opacity: 0; transform: translateY(16px) scale(.97); } to { opacity: 1; transform: none; } }
+  .modal {
+    position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 18px;
+    background: rgba(10, 8, 30, .55);
+  }
+  .dialog {
+    width: 100%; max-width: 380px; background: var(--surface); color: var(--ink);
+    border-radius: 20px; padding: 22px 20px 18px; box-shadow: 0 20px 60px rgba(0,0,0,.4);
+    animation: dialogIn .22s ease-out both;
+  }
+  .dialog h2 { margin: 0 0 6px; font-size: 21px; line-height: 1.25; }
+  .dialog p { margin: 0 0 18px; color: var(--muted); }
+  .dialog .row { margin: 0; }
+  .dialog .row button { flex: 1; }
   [hidden] { display: none !important; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
@@ -206,8 +261,15 @@
 
   <!-- Робочий екран -->
   <section id="workView" hidden>
-    <h1>Відмітка приходу</h1>
+    <h1>Відмітка приходу<span class="role" id="roleBadge" hidden>Адміністратор</span></h1>
     <p class="event-line" hidden><span class="ev-title"></span><span class="ev-when"></span><span class="ev-where"></span></p>
+
+    <div class="stats" id="stats" hidden aria-live="polite">
+      <div class="stat"><b id="stReg">–</b><span>зареєстровано</span></div>
+      <div class="stat ok"><b id="stArr">–</b><span>прийшло</span></div>
+      <div class="stat" id="stLeftBox"><b id="stLeft">–</b><span>вільних місць</span></div>
+    </div>
+    <div class="progress" id="stProgress" hidden title="Скільки зареєстрованих уже прийшло"><i id="stBar"></i></div>
 
     <button class="primary wide" id="scanBtn" type="button">Сканувати QR</button>
 
@@ -246,8 +308,48 @@
       <button class="primary wide" id="save">Зберегти відмітки</button>
     </div>
 
+    <!-- Адміністрування -->
+    <section class="admin" id="adminPanel" hidden>
+      <details>
+        <summary>Адміністрування</summary>
+
+        <h3>Ліміт місць</h3>
+        <p class="hint">Порожньо — без ліміту, 0 — реєстрацію закрито.</p>
+        <form class="row" id="limitForm">
+          <input id="limitInput" type="number" min="0" step="1" inputmode="numeric" placeholder="без ліміту" aria-label="Ліміт місць">
+          <button class="primary" type="submit" id="limitBtn">Зберегти</button>
+        </form>
+        <div class="error" id="limitError" role="alert"></div>
+
+        <hr>
+        <h3>Зареєструвати дитину</h3>
+        <p class="hint">Працює навіть коли місць немає або реєстрацію закрито.</p>
+        <form class="stack" id="adRegForm" novalidate>
+          <input id="adPhone" type="tel" inputmode="tel" placeholder="Телефон: 0XX XXX XX XX" aria-label="Телефон">
+          <input id="adGuardian" placeholder="ПІБ супровідника" aria-label="ПІБ супровідника">
+          <input class="ad-kid" placeholder="Ім’я дитини" aria-label="Ім’я дитини 1">
+          <input class="ad-kid" placeholder="Ім’я дитини 2 (необов’язково)" aria-label="Ім’я дитини 2">
+          <input class="ad-kid" placeholder="Ім’я дитини 3 (необов’язково)" aria-label="Ім’я дитини 3">
+          <button class="primary wide" type="submit" id="adRegBtn">Зареєструвати</button>
+        </form>
+        <div class="error" id="adError" role="alert"></div>
+      </details>
+    </section>
+
     <div class="footer"><button class="link-btn" type="button" id="logout">Вийти</button></div>
   </section>
+
+  <!-- Підтвердження -->
+  <div class="modal" id="confirm" hidden role="dialog" aria-modal="true" aria-labelledby="cfTitle">
+    <div class="dialog">
+      <h2 id="cfTitle"></h2>
+      <p id="cfText"></p>
+      <div class="row">
+        <button class="ghost" type="button" id="cfNo">Скасувати</button>
+        <button class="danger" type="button" id="cfYes">Видалити</button>
+      </div>
+    </div>
+  </div>
 
   <canvas id="canvas" hidden></canvas>
 </main>
@@ -306,8 +408,12 @@
   // ---------- Сервер ----------
   const ARGS = {
     checkPin: ['pin'], getFamily: ['code', 'pin'],
-    findByPhone: ['phone', 'pin'], saveArrivals: ['code', 'ids', 'pin']
+    findByPhone: ['phone', 'pin'], saveArrivals: ['code', 'ids', 'pin'],
+    stats: ['pin'], deleteChild: ['code', 'id', 'pin'],
+    setLimit: ['limit', 'pin'], adminRegister: ['form', 'pin']
   };
+  let ROLE = '';
+  const isAdmin = () => ROLE === 'admin';
   async function call(fn, ...args) {
     const body = { action: fn };
     ARGS[fn].forEach((k, i) => { body[k] = args[i]; });
@@ -328,7 +434,7 @@
   async function start() {
     PIN = store.get();
     if (PIN) {
-      try { await call('checkPin', PIN); $('boot').hidden = true; return enter(); }
+      try { ROLE = (await call('checkPin', PIN)).role; $('boot').hidden = true; return enter(); }
       catch (e) { store.set(''); PIN = ''; }
     }
     $('boot').hidden = true;
@@ -342,7 +448,7 @@
     const v = $('pin').value.trim();
     setBusy($('pinBtn'), true, 'Перевіряю…');
     try {
-      await call('checkPin', v);
+      ROLE = (await call('checkPin', v)).role;
       PIN = v; store.set(v);
       $('pinView').hidden = true;
       enter();
@@ -353,10 +459,125 @@
     setBusy($('pinBtn'), false, 'Увійти');
   };
 
+  let statsTimer = null;
   function enter() {
     reveal($('workView'));
+    $('roleBadge').hidden = !isAdmin();
+    $('adminPanel').hidden = !isAdmin();
+    loadStats();
+    clearInterval(statsTimer);
+    statsTimer = setInterval(() => { if (!document.hidden) loadStats(); }, 30000);
     if (START_CODE) load(call('getFamily', START_CODE, PIN), 'Відкриваю картку родини…');
   }
+
+  // ---------- Статистика ----------
+  function loadStats() {
+    return call('stats', PIN).then(renderStats).catch(() => {});
+  }
+  function renderStats(s) {
+    if (!s) return;
+    const first = $('stats').hidden;
+    $('stats').hidden = false;
+    $('stProgress').hidden = false;
+    $('stReg').innerHTML = '';
+    $('stReg').append(String(s.registered));
+    if (s.limit !== null) {
+      const sm = document.createElement('small'); sm.textContent = ' / ' + s.limit; $('stReg').append(sm);
+    }
+    $('stArr').textContent = s.arrived;
+    $('stLeft').textContent = s.left === null ? '∞' : s.left;
+    $('stLeftBox').classList.toggle('none', s.left === 0);
+    $('stBar').style.width = (s.registered ? Math.round(s.arrived / s.registered * 100) : 0) + '%';
+    if (first) replay($('stats'), 'enter');
+    const li = $('limitInput');
+    if (document.activeElement !== li) li.value = s.limit === null ? '' : s.limit;
+  }
+
+  // ---------- Підтвердження ----------
+  function confirmDialog(title, text, yesLabel) {
+    return new Promise(resolve => {
+      $('cfTitle').textContent = title;
+      $('cfText').textContent = text;
+      $('cfYes').textContent = yesLabel || 'Видалити';
+      $('confirm').hidden = false;
+      $('cfNo').focus();
+      const done = v => {
+        $('confirm').hidden = true;
+        $('cfYes').onclick = $('cfNo').onclick = $('confirm').onclick = null;
+        document.removeEventListener('keydown', onKey);
+        resolve(v);
+      };
+      const onKey = e => { if (e.key === 'Escape') done(false); };
+      document.addEventListener('keydown', onKey);
+      $('cfYes').onclick = () => done(true);
+      $('cfNo').onclick = () => done(false);
+      $('confirm').onclick = e => { if (e.target === $('confirm')) done(false); };
+    });
+  }
+
+  const TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>';
+
+  async function removeChild(k, btn) {
+    const ok = await confirmDialog('Видалити «' + k.name + '» з реєстрації?',
+      'Дитину буде видалено з таблиці, місце звільниться. Цю дію не можна скасувати.');
+    if (!ok) return;
+    // зберігаємо незбережені позначки інших дітей
+    const keep = {};
+    $('kids').querySelectorAll('input[type=checkbox]').forEach(cb => keep[cb.value] = cb.checked);
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" aria-hidden="true" style="margin:0"></span>';
+    try {
+      const res = await call('deleteChild', current.code, k.id, PIN);
+      renderStats(res.stats);
+      if (res.empty) {
+        $('family').hidden = true; current = null;
+        toast('Реєстрацію видалено');
+      } else {
+        render(res.family, false, keep);
+        toast('«' + k.name + '» видалено з реєстрації');
+      }
+    } catch (ex) {
+      showError($('error'), msg(ex));
+      btn.disabled = false; btn.innerHTML = TRASH;
+    }
+  }
+
+  // ---------- Адмін: ліміт ----------
+  $('limitForm').onsubmit = async (e) => {
+    e.preventDefault();
+    showError($('limitError'), '');
+    const v = $('limitInput').value.trim();
+    setBusy($('limitBtn'), true, 'Зберігаю…');
+    try {
+      renderStats(await call('setLimit', v === '' ? '' : Number(v), PIN));
+      toast(v === '' ? 'Ліміт знято' : 'Ліміт: ' + v);
+    } catch (ex) {
+      showError($('limitError'), msg(ex));
+    }
+    setBusy($('limitBtn'), false, 'Зберегти');
+  };
+
+  // ---------- Адмін: реєстрація понад ліміт ----------
+  $('adRegForm').onsubmit = async (e) => {
+    e.preventDefault();
+    showError($('adError'), '');
+    const form = {
+      phone: $('adPhone').value,
+      guardian: $('adGuardian').value,
+      children: [...document.querySelectorAll('.ad-kid')].map(i => i.value)
+    };
+    setBusy($('adRegBtn'), true, 'Реєструю…');
+    try {
+      const res = await call('adminRegister', form, PIN);
+      renderStats(res.stats);
+      $('adRegForm').reset();
+      render(res.family, true);
+      toast(res.added ? 'Зареєстровано: ' + res.added : 'Ці діти вже були зареєстровані');
+    } catch (ex) {
+      showError($('adError'), msg(ex));
+    }
+    setBusy($('adRegBtn'), false, 'Зареєструвати');
+  };
 
   // ---------- Сканер камерою ----------
   let stream = null, scanning = false, detector = null;
@@ -532,7 +753,7 @@
     }
   }
 
-  function render(f, animate) {
+  function render(f, animate, keep) {
     current = f;
     if (animate) reveal($('family')); else $('family').hidden = false;
     $('guardian').textContent = f.guardian;
@@ -545,7 +766,9 @@
       label.className = 'kid' + (k.arrivedAt ? ' on' : '');
       if (animate) { label.classList.add('enter'); label.style.animationDelay = (80 + i * 70) + 'ms'; }
       const cb = document.createElement('input');
-      cb.type = 'checkbox'; cb.value = k.id; cb.checked = !!k.arrivedAt;
+      cb.type = 'checkbox'; cb.value = k.id;
+      cb.checked = (keep && k.id in keep) ? keep[k.id] : !!k.arrivedAt;
+      if (cb.checked) label.classList.add('on'); else label.classList.remove('on');
       const mark = document.createElement('span'); mark.className = 'box'; mark.textContent = '✓';
       cb.onchange = () => {
         label.classList.toggle('on', cb.checked);
@@ -557,7 +780,21 @@
       time.textContent = k.arrivedAt ? 'Прийшов(ла) о ' + k.arrivedAt : 'Ще не відмічено';
       text.append(name, time);
       label.append(cb, mark, text);
-      box.append(label);
+      if (isAdmin()) {
+        const wrap = document.createElement('div');
+        wrap.className = 'kid-wrap';
+        if (animate) { label.classList.remove('enter'); wrap.classList.add('enter'); wrap.style.animationDelay = label.style.animationDelay; label.style.animationDelay = ''; }
+        const del = document.createElement('button');
+        del.type = 'button'; del.className = 'del-btn';
+        del.innerHTML = TRASH;
+        del.setAttribute('aria-label', 'Видалити ' + k.name + ' з реєстрації');
+        del.title = 'Видалити з реєстрації';
+        del.onclick = () => removeChild(k, del);
+        wrap.append(label, del);
+        box.append(wrap);
+      } else {
+        box.append(label);
+      }
     });
     if (animate) $('family').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -577,6 +814,7 @@
     try {
       render(await call('saveArrivals', current.code, ids, PIN), false);
       toast('Відмітки збережено');
+      loadStats();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (ex) {
       showError($('error'), msg(ex));
@@ -587,8 +825,10 @@
 
   $('logout').onclick = () => {
     stopScan();
-    store.set(''); PIN = ''; current = null;
+    store.set(''); PIN = ''; current = null; ROLE = '';
+    clearInterval(statsTimer);
     $('workView').hidden = true; $('family').hidden = true;
+    $('adminPanel').hidden = true; $('stats').hidden = true; $('stProgress').hidden = true;
     $('pin').value = '';
     reveal($('pinView'));
   };
