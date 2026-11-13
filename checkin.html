@@ -258,6 +258,26 @@
   .event-line.loading .ev-when { width: 110px; }
   .event-line.loading .ev-where { width: 240px; flex-basis: auto; }
   input.skeleton::placeholder { color: transparent; }
+  .ad-phone-line {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    border: 2px solid var(--line); border-radius: 12px; padding: 8px 14px; margin-top: 8px;
+  }
+  .ad-phone-line b { font-size: 18px; }
+  .ad-existing { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 6px; }
+  .ad-existing li {
+    display: flex; align-items: center; gap: 8px; background: var(--bg); border-radius: 12px;
+    padding: 8px 12px; font-weight: 800;
+  }
+  .ad-existing .chk {
+    display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--ok); color: #FFFFFF; font-size: 13px; margin-left: auto;
+  }
+  .ad-kid-row { display: flex; gap: 8px; }
+  .ad-kid-row input { flex: 1; }
+  .ad-kid-row button {
+    flex: 0 0 48px; border: 2px solid var(--line); background: var(--surface); color: var(--muted); font-size: 22px;
+  }
+  input[readonly] { background: var(--bg); color: var(--muted); cursor: not-allowed; }
   [hidden] { display: none !important; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
@@ -349,14 +369,28 @@
         <hr>
         <h3>Зареєструвати дитину</h3>
         <p class="hint">Працює навіть коли місць немає або реєстрацію закрито.</p>
-        <form class="stack" id="adRegForm" novalidate>
+        <form class="row" id="adPhoneForm" novalidate>
           <input id="adPhone" type="tel" inputmode="tel" placeholder="Телефон: 0XX XXX XX XX" aria-label="Телефон">
-          <input id="adGuardian" placeholder="ПІБ супровідника" aria-label="ПІБ супровідника">
-          <input class="ad-kid" placeholder="Ім’я дитини" aria-label="Ім’я дитини 1">
-          <input class="ad-kid" placeholder="Ім’я дитини 2 (необов’язково)" aria-label="Ім’я дитини 2">
-          <input class="ad-kid" placeholder="Ім’я дитини 3 (необов’язково)" aria-label="Ім’я дитини 3">
-          <button class="primary wide" type="submit" id="adRegBtn">Зареєструвати</button>
+          <button class="primary" type="submit" id="adFindBtn">Далі</button>
         </form>
+
+        <div id="adStep2" hidden>
+          <div class="ad-phone-line">
+            <b id="adPhoneShown"></b>
+            <button class="link-btn" type="button" id="adChange">Інший номер</button>
+          </div>
+          <div id="adExisting" hidden>
+            <p class="hint" style="margin-top:12px">Уже зареєстровані на цей номер:</p>
+            <ul class="ad-existing" id="adExistingList"></ul>
+          </div>
+          <form class="stack" id="adRegForm" novalidate>
+            <input id="adGuardian" placeholder="ПІБ супровідника" aria-label="ПІБ супровідника">
+            <p class="hint" id="adGuardianNote" hidden>Супровідник для цього номера не змінюється.</p>
+            <div class="stack" id="adKids" style="margin-top:0"></div>
+            <button class="link-btn" type="button" id="adAddKid" style="justify-self:start">+ Додати ще дитину</button>
+            <button class="primary wide" type="submit" id="adRegBtn">Зареєструвати</button>
+          </form>
+        </div>
         <div class="error" id="adError" role="alert"></div>
       </details>
     </section>
@@ -435,7 +469,8 @@
     checkPin: ['pin'], getFamily: ['code', 'pin'],
     findByPhone: ['phone', 'pin'], saveArrivals: ['code', 'ids', 'pin'],
     stats: ['pin'], deleteChild: ['code', 'id', 'pin'],
-    setLimit: ['limit', 'pin'], adminRegister: ['form', 'pin']
+    setLimit: ['limit', 'pin'], adminRegister: ['form', 'pin'],
+    adminLookup: ['phone', 'pin']
   };
   let ROLE = '';
   const isAdmin = () => ROLE === 'admin';
@@ -600,26 +635,111 @@
     setBusy($('limitBtn'), false, 'Зберегти');
   };
 
-  // ---------- Адмін: реєстрація понад ліміт ----------
+  // ---------- Адмін: реєстрація (без ліміту місць і без обмеження 3 дітей) ----------
+  let adState = { phone: '', existing: false };
+
+  function adAddKidRow(focus) {
+    const row = document.createElement('div');
+    row.className = 'ad-kid-row enter';
+    const input = document.createElement('input');
+    input.className = 'ad-kid';
+    input.placeholder = 'Ім’я дитини';
+    input.setAttribute('aria-label', 'Ім’я дитини');
+    const del = document.createElement('button');
+    del.type = 'button'; del.textContent = '×'; del.setAttribute('aria-label', 'Прибрати');
+    del.onclick = () => {
+      if ($('adKids').children.length > 1) row.remove();
+      else { input.value = ''; replay(input, 'shake'); }
+    };
+    row.append(input, del);
+    $('adKids').append(row);
+    if (focus) input.focus();
+  }
+
+  function adShowExisting(f) {
+    const list = $('adExistingList');
+    list.innerHTML = '';
+    (f ? f.children : []).forEach((k, i) => {
+      const li = document.createElement('li');
+      li.className = 'enter'; li.style.animationDelay = (i * 60) + 'ms';
+      li.append(k.name);
+      if (k.arrivedAt) {
+        const c = document.createElement('span');
+        c.className = 'chk'; c.textContent = '✓'; c.title = 'Прийшов(ла) о ' + k.arrivedAt;
+        li.append(c);
+      }
+      list.append(li);
+    });
+    $('adExisting').hidden = !(f && f.children.length);
+  }
+
+  function adReset() {
+    adState = { phone: '', existing: false };
+    $('adStep2').hidden = true;
+    $('adPhoneForm').hidden = false;
+    $('adPhone').value = '';
+    $('adKids').innerHTML = '';
+    showError($('adError'), '');
+  }
+
+  $('adPhoneForm').onsubmit = async (e) => {
+    e.preventDefault();
+    showError($('adError'), '');
+    setBusy($('adFindBtn'), true, 'Шукаю…');
+    try {
+      const r = await call('adminLookup', $('adPhone').value, PIN);
+      adState = { phone: r.phone, existing: r.found };
+      $('adPhoneShown').textContent = r.phone;
+      adShowExisting(r.found ? r.family : null);
+      $('adGuardian').value = r.found ? r.family.guardian : '';
+      $('adGuardian').readOnly = r.found;
+      $('adGuardianNote').hidden = !r.found;
+      $('adKids').innerHTML = '';
+      adAddKidRow(false);
+      $('adRegBtn').textContent = r.found ? 'Додати дітей' : 'Зареєструвати';
+      $('adPhoneForm').hidden = true;
+      reveal($('adStep2'));
+      (r.found ? $('adKids').querySelector('input') : $('adGuardian')).focus();
+    } catch (ex) {
+      showError($('adError'), msg(ex));
+      replay($('adPhone'), 'shake');
+    }
+    setBusy($('adFindBtn'), false, 'Далі');
+  };
+
+  $('adChange').onclick = () => { adReset(); $('adPhone').focus(); };
+  $('adAddKid').onclick = () => adAddKidRow(true);
+
   $('adRegForm').onsubmit = async (e) => {
     e.preventDefault();
     showError($('adError'), '');
+    const label = adState.existing ? 'Додати дітей' : 'Зареєструвати';
     const form = {
-      phone: $('adPhone').value,
+      phone: adState.phone,
       guardian: $('adGuardian').value,
-      children: [...document.querySelectorAll('.ad-kid')].map(i => i.value)
+      children: [...$('adKids').querySelectorAll('input')].map(i => i.value)
     };
     setBusy($('adRegBtn'), true, 'Реєструю…');
+    $('stats').classList.add('updating');
     try {
       const res = await call('adminRegister', form, PIN);
       renderStats(res.stats);
-      $('adRegForm').reset();
       render(res.family, true);
+      // лишаємось на цьому номері: оновлений список, порожні поля для нових дітей
+      adState.existing = true;
+      adShowExisting(res.family);
+      $('adGuardian').value = res.family.guardian;
+      $('adGuardian').readOnly = true;
+      $('adGuardianNote').hidden = false;
+      $('adKids').innerHTML = '';
+      adAddKidRow(false);
+      setBusy($('adRegBtn'), false, 'Додати дітей');
       toast(res.added ? 'Зареєстровано: ' + res.added : 'Ці діти вже були зареєстровані');
     } catch (ex) {
       showError($('adError'), msg(ex));
+      setBusy($('adRegBtn'), false, label);
     }
-    setBusy($('adRegBtn'), false, 'Зареєструвати');
+    $('stats').classList.remove('updating');
   };
 
   // ---------- Сканер камерою ----------
@@ -872,6 +992,7 @@
     clearInterval(statsTimer);
     $('workView').hidden = true; $('family').hidden = true;
     $('adminPanel').hidden = true; $('stats').hidden = true; $('stProgress').hidden = true;
+    adReset();
     $('pin').value = '';
     reveal($('pinView'));
   };
