@@ -146,6 +146,8 @@
   }
   .organizer { margin: 14px 0 0; color: var(--muted); font-size: 15px; }
   .organizer strong { color: var(--ink); }
+  .contact-line { margin: 6px 0 0; color: var(--muted); font-size: 15px; }
+  .contact-line a { color: var(--primary); font-weight: 800; text-decoration: none; white-space: nowrap; }
   [hidden] { display: none !important; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
@@ -225,6 +227,7 @@
     </div>
   </footer>
   <p class="organizer" id="organizerLine" hidden>Організатор: <strong id="organizerName"></strong></p>
+  <p class="contact-line" id="contactLine" hidden>Питання за телефоном: <a id="contactPhone" href="#"></a></p>
 </main>
 
 <script>/* qrcode-generator 1.4.4, MIT, https://github.com/kazuhikoarase/qrcode-generator */
@@ -239,7 +242,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   // Запасні значення — якщо файл не завантажиться
   const EVENT_DEFAULTS = {
     title: 'Реєстрація на захід', date: '', time: '',
-    place: '', address: '', map: '', background: '', organizer: ''
+    place: '', address: '', map: '', background: '', organizer: '', phone: ''
   };
   let EVENT = EVENT_DEFAULTS;
 
@@ -262,6 +265,9 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     document.title = 'Реєстрація: ' + EVENT.title;
     $('organizerName').textContent = EVENT.organizer;
     $('organizerLine').hidden = !EVENT.organizer;
+    $('contactPhone').textContent = EVENT.phone;
+    $('contactPhone').href = 'tel:' + String(EVENT.phone).replace(/[^\d+]/g, '');
+    $('contactLine').hidden = !EVENT.phone;
     document.querySelectorAll('.ev-org').forEach(el => {
       el.textContent = EVENT.organizer ? 'Організатор: ' + EVENT.organizer : '';
       el.hidden = !EVENT.organizer;
