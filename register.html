@@ -167,6 +167,12 @@
     padding: 70px 0; color: var(--muted); font-weight: 700; text-align: center;
   }
   .boot .spinner { width: 44px; height: 44px; border-width: 4px; margin: 0; color: var(--primary); }
+  input[readonly] { background: var(--bg); color: var(--muted); cursor: not-allowed; }
+  .field-note { color: var(--muted); font-size: 14px; margin: 6px 0 0; }
+  .kids li { display: flex; flex-direction: column; align-items: center; margin-bottom: 8px; }
+  .kid-status { font-size: 13px; font-weight: 800; border-radius: 999px; padding: 1px 10px; margin-top: 2px; }
+  .kid-status.in { background: #DDF5E9; color: #137A45; }
+  .kid-status.wait { background: #EEF1FA; color: #5B6585; font-weight: 700; }
   [hidden] { display: none !important; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
@@ -209,6 +215,7 @@
 
       <label for="guardian">ПІБ супровідника</label>
       <input id="guardian" autocomplete="name" placeholder="Іваненко Марія Петрівна" required>
+      <p class="field-note" id="guardianNote" hidden>Для вже зареєстрованого номера супровідник не змінюється.</p>
 
       <label>Ім’я дитини</label>
       <div id="children"></div>
@@ -362,6 +369,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   }
 
 
+  const MAX_KIDS = 3;   // має збігатися з MAX_KIDS_PER_FAMILY у Code.gs
+
   // ---------- Вільні місця ----------
   function plural(n, one, few, many) {
     const m10 = n % 10, m100 = n % 100;
@@ -384,7 +393,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       if (wasHidden || prev !== state.left) replay(el, 'pop');
     });
     $('closedNote').hidden = state.left !== 0;
-    $('moreKids').hidden = state.left === 0;
+    $('moreKids').hidden = state.left === 0 || state.canAdd === 0;
+    $('moreKids').textContent = 'Зареєструвати ще дитину';
     updateChildLimit();
   }
 
@@ -395,16 +405,24 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   function updateChildLimit() {
     const btn = $('addChild');
     if (!btn) return;
-    const left = (state.left === null || state.left === undefined) ? Infinity : state.left;
+    const seats = (state.left === null || state.left === undefined) ? Infinity : state.left;
+    const fam = (state.canAdd === undefined) ? Infinity : state.canAdd;
+    const left = Math.min(seats, fam);
     const n = childRows().length;
     const full = n >= left;
     btn.disabled = full;
-    btn.textContent = full ? 'Більше вільних місць немає' : '+ Додати ще дитину';
+    btn.textContent = !full ? '+ Додати ще дитину'
+      : (fam <= seats ? 'Максимум ' + MAX_KIDS + ' ' + plural(MAX_KIDS, 'дитина', 'дитини', 'дітей') + ' на один номер'
+                      : 'Більше вільних місць немає');
+    if (!$('formView').hidden && fam < Infinity && n > fam) {
+      showError($('error'), 'На цей номер можна додати ще лише ' + fam + ' ' + plural(fam, 'дитину', 'дитини', 'дітей') + '.');
+      return;
+    }
     if ($('formView').hidden) return;
-    if (left === 0) showError($('error'), 'На жаль, вільних місць більше немає. Реєстрацію закрито.');
-    else if (n > left) showError($('error'), 'Залишилося лише ' + left + ' ' + plural(left, 'місце', 'місця', 'місць') +
+    if (seats === 0) showError($('error'), 'На жаль, вільних місць більше немає. Реєстрацію закрито.');
+    else if (n > seats) showError($('error'), 'Залишилося лише ' + seats + ' ' + plural(seats, 'місце', 'місця', 'місць') +
                                   '. Приберіть зайвих дітей із заявки.');
-    else if (/місц/.test($('error').textContent)) showError($('error'), '');
+    else if (/місц|на цей номер/i.test($('error').textContent)) showError($('error'), '');
   }
   function refreshSeats() { return call('status', {}).then(r => setSeats(r.left)).catch(() => {}); }
   const seatsReady = refreshSeats();
@@ -423,6 +441,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     try {
       const res = await call('lookupPhone', { phone: $('phone').value });
       state.phone = res.phone;
+      state.canAdd = res.canAdd;
       setSeats(res.left);
       if (res.found) {
         state.guardian = res.guardian;
@@ -465,8 +484,9 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     return input;
   }
   $('addChild').onclick = () => {
-    const left = (state.left === null || state.left === undefined) ? Infinity : state.left;
-    if (childRows().length >= left) { updateChildLimit(); return; }
+    const seats = (state.left === null || state.left === undefined) ? Infinity : state.left;
+    const fam = (state.canAdd === undefined) ? Infinity : state.canAdd;
+    if (childRows().length >= Math.min(seats, fam)) { updateChildLimit(); return; }
     addChild().focus();
     updateChildLimit();
     refreshSeats();          // перерахунок: хтось міг щойно зайняти місця
@@ -475,6 +495,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   function openForm() {
     $('phoneShown').textContent = state.phone;
     $('guardian').value = state.guardian;
+    $('guardian').readOnly = state.existing;
+    $('guardianNote').hidden = !state.existing;
     childrenBox.innerHTML = '';
     addChild();
     showError($('error'), '');
@@ -486,7 +508,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     show('formView');
     updateChildLimit();
     refreshSeats();
-    (state.guardian ? childrenBox.querySelector('input') : $('guardian')).focus();
+    (state.existing ? childrenBox.querySelector('input') : $('guardian')).focus();
   }
 
   $('changePhone').onclick = () => { show('phoneView'); $('phone').focus(); refreshSeats(); };
@@ -501,8 +523,9 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
         guardian: $('guardian').value,
         children: [...childrenBox.querySelectorAll('input')].map(i => i.value)
       } });
-      state.guardian = $('guardian').value.trim();
+      state.guardian = res.guardian;
       state.existing = true;
+      state.canAdd = res.canAdd;
       setSeats(res.left);
       showQr(res, res.added ? 'Готово' : 'Ці діти вже зареєстровані');
     } catch (ex) {
@@ -526,9 +549,15 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     qr.append(img);
     const ul = $('kids');
     ul.innerHTML = '';
-    res.children.forEach((n, i) => {
+    res.children.forEach((c, i) => {
       const li = document.createElement('li');
-      li.textContent = n;
+      const name = document.createElement('span');
+      name.textContent = typeof c === 'string' ? c : c.name;
+      const st = document.createElement('span');
+      const at = typeof c === 'string' ? '' : c.arrivedAt;
+      st.className = 'kid-status ' + (at ? 'in' : 'wait');
+      st.textContent = at ? '✓ Прийшов(ла) о ' + at : 'Ще не прийшов(ла)';
+      li.append(name, st);
       li.className = 'enter';
       li.style.animationDelay = (350 + i * 90) + 'ms';
       ul.append(li);
@@ -541,7 +570,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
   $('moreKids').onclick = openForm;
   $('otherPhone').onclick = () => {
-    state = { phone: '', guardian: '', existing: false, left: state.left };
+    state = { phone: '', guardian: '', existing: false, left: state.left, canAdd: undefined };
     $('phone').value = '';
     show('phoneView');
     $('phone').focus();
