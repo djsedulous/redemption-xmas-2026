@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Реєстрація на захід</title>
+<title>Реєстрація: Різдвяна дитяча програма</title>
 <meta charset="utf-8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
@@ -96,6 +96,25 @@
     background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
     animation: shine .9s .35s ease-out both; pointer-events: none;
   }
+  /* Інформація про захід */
+  .event { margin: 0 0 18px; }
+  .event-kicker { color: var(--muted); font-weight: 700; margin: 0 0 4px; }
+  .event h1 { font-size: 30px; margin: 0 0 12px; }
+  .when {
+    display: inline-flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    background: var(--sun); color: #1D2748; border-radius: 12px; padding: 8px 14px; font-weight: 800;
+  }
+  .when .date { font-size: 20px; }
+  .when .time { font-size: 20px; opacity: .8; }
+  .ticket-event { margin-top: 14px; padding-top: 12px; border-top: 2px dashed #D4DCF2; font-weight: 700; color: #1D2748; }
+  .ticket-event small { display: block; color: #5B6585; font-weight: 600; font-size: 14px; }
+  .venue {
+    margin-top: 36px; padding-top: 16px; border-top: 2px dashed var(--line);
+    color: var(--muted); display: flex; gap: 10px; align-items: flex-start;
+  }
+  .venue svg { flex: 0 0 22px; margin-top: 2px; color: var(--primary); }
+  .venue strong { color: var(--ink); display: block; }
+  .venue a { color: var(--primary); font-weight: 700; text-decoration: none; }
   [hidden] { display: none !important; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
@@ -107,7 +126,11 @@
 <main>
   <!-- Крок 1: номер телефону -->
   <section id="phoneView">
-    <h1 id="eventTitle"></h1>
+    <div class="event" style="visibility:hidden">
+      <p class="event-kicker">Реєстрація на захід</p>
+      <h1 id="eventTitle"></h1>
+      <div class="when"><span class="date" id="eventDate"></span><span class="time" id="eventTime"></span></div>
+    </div>
     <p class="lead">Введіть номер телефону. Якщо ви вже реєструвалися, одразу покажемо ваш QR-код.</p>
     <form id="phoneForm" novalidate>
       <label for="phone">Номер телефону</label>
@@ -147,6 +170,10 @@
       <div class="ticket-inner">
         <div id="qr"></div>
         <ul class="kids" id="kids"></ul>
+        <div class="ticket-event">
+          <span class="ev-title"></span>
+          <small class="ev-when"></small>
+        </div>
         <div class="code" id="code"></div>
       </div>
     </div>
@@ -154,6 +181,17 @@
     <button class="ghost" id="moreKids">Зареєструвати ще дитину</button>
     <button class="ghost" id="otherPhone">Інший номер телефону</button>
   </section>
+  <footer class="venue">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>
+    </svg>
+    <div>
+      <strong id="venuePlace"></strong>
+      <span id="venueAddress" style="display:block"></span>
+      <a id="venueMap" target="_blank" rel="noopener">Відкрити на карті</a>
+    </div>
+  </footer>
 </main>
 
 <script>/* qrcode-generator 1.4.4, MIT, https://github.com/kazuhikoarase/qrcode-generator */
@@ -162,11 +200,42 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 <script>
   // ↓↓↓ Посилання веб-застосунку Apps Script (те саме, що в checkin.html)
   const API_URL = 'https://script.google.com/macros/s/AKfycbyS9SgAQc1RNQRMpka1EFERbL5ItSfs-oaFxxe9ebSno6tWE3Oipy482GXo2eUb_M_3/exec';
-  const EVENT_TITLE = 'Реєстрація на захід';
-
   const $ = id => document.getElementById(id);
-  $('eventTitle').textContent = EVENT_TITLE;
-  document.title = EVENT_TITLE;
+
+  // ---------- Інформація про захід: береться з event.json ----------
+  // Запасні значення — якщо файл не завантажиться
+  const EVENT_DEFAULTS = {
+    title: 'Реєстрація на захід', date: '', time: '',
+    place: '', address: '', map: ''
+  };
+  let EVENT = EVENT_DEFAULTS;
+
+  function applyEvent(ev) {
+    EVENT = Object.assign({}, EVENT_DEFAULTS, ev);
+    const when = [EVENT.date, EVENT.time && ('о ' + EVENT.time)].filter(Boolean);
+    $('eventTitle').textContent = EVENT.title;
+    $('eventDate').textContent = EVENT.date;
+    $('eventTime').textContent = EVENT.time ? 'о ' + EVENT.time : '';
+    document.querySelector('.when').hidden = !when.length;
+    $('venuePlace').textContent = EVENT.place;
+    $('venueAddress').textContent = EVENT.address;
+    $('venueAddress').hidden = !EVENT.address;
+    $('venueMap').href = EVENT.map || ('https://www.google.com/maps/search/?api=1&query=' +
+      encodeURIComponent([EVENT.place, EVENT.address].filter(Boolean).join(', ')));
+    document.querySelector('.venue').hidden = !(EVENT.place || EVENT.address || EVENT.map);
+    document.querySelectorAll('.ev-title').forEach(el => el.textContent = EVENT.title);
+    document.querySelectorAll('.ev-when').forEach(el =>
+      el.textContent = [when.join(' '), EVENT.place].filter(Boolean).join(', '));
+    document.title = 'Реєстрація: ' + EVENT.title;
+    const box = document.querySelector('.event');
+    box.style.visibility = '';
+    replay(box, 'enter');
+  }
+
+  fetch('event.json', { cache: 'no-cache' })
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(applyEvent)
+    .catch(() => applyEvent({}));
   const msg = ex => String(ex && ex.message || ex).replace(/^Error:\s*/, '');
   let state = { phone: '', guardian: '', existing: false };
 
