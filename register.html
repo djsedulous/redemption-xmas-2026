@@ -108,6 +108,9 @@
   .when .time { font-size: 20px; opacity: .8; }
   .ticket-event { margin-top: 14px; padding-top: 12px; border-top: 2px dashed #D4DCF2; font-weight: 700; color: #1D2748; }
   .ticket-event small { display: block; color: #5B6585; font-weight: 600; font-size: 14px; }
+  .ticket-event .ev-when { color: #1D2748; font-weight: 800; font-size: 15px; margin-top: 2px; }
+  .ticket-org { margin-top: 10px; padding-top: 10px; border-top: 1px solid #E3E8F7; }
+  .ticket-org small { display: block; color: #5B6585; font-weight: 600; font-size: 13px; }
   .venue {
     margin-top: 36px; padding-top: 16px; border-top: 2px dashed var(--line);
     color: var(--muted); display: flex; gap: 10px; align-items: flex-start;
@@ -153,6 +156,8 @@
     background: var(--line); color: var(--ink); font-weight: 800; font-size: 15px;
   }
   .seats.low { background: var(--sun); color: #1D2748; }
+  .seats.none { background: var(--error); color: #FFFFFF; }
+  .seats-top { display: table; margin: 10px 0 0; }
   .closed {
     margin: 0 0 18px; padding: 12px 14px; border-radius: 12px;
     border: 2px solid var(--error); color: var(--error); font-weight: 700;
@@ -172,6 +177,7 @@
       <p class="event-kicker">Реєстрація на захід</p>
       <h1 id="eventTitle"></h1>
       <div class="when"><span class="date" id="eventDate"></span><span class="time" id="eventTime"></span></div>
+      <p class="seats seats-top" id="seatsTop" hidden></p>
     </div>
     <p class="lead">Введіть номер телефону. Якщо ви вже реєструвалися, одразу покажемо ваш QR-код.</p>
     <p class="closed" id="closedNote" hidden>Усі місця вже зайняті, реєстрацію закрито. Якщо ви реєструвалися раніше — введіть свій номер, щоб отримати QR-код.</p>
@@ -217,6 +223,9 @@
         <div class="ticket-event">
           <span class="ev-title"></span>
           <small class="ev-when"></small>
+          <small class="ev-place"></small>
+        </div>
+        <div class="ticket-org">
           <small class="ev-org"></small>
         </div>
         <div class="code" id="code"></div>
@@ -271,8 +280,15 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       encodeURIComponent([EVENT.place, EVENT.address].filter(Boolean).join(', ')));
     document.querySelector('.venue').hidden = !(EVENT.place || EVENT.address || EVENT.map);
     document.querySelectorAll('.ev-title').forEach(el => el.textContent = EVENT.title);
-    document.querySelectorAll('.ev-when').forEach(el =>
-      el.textContent = [when.join(' '), EVENT.place].filter(Boolean).join(', '));
+    document.querySelectorAll('.ev-when').forEach(el => {
+      el.textContent = when.join(' ');
+      el.hidden = !when.length;
+    });
+    document.querySelectorAll('.ev-place').forEach(el => {
+      const where = [EVENT.place, EVENT.address].filter(Boolean).join(', ');
+      el.textContent = where;
+      el.hidden = !where;
+    });
     document.title = 'Реєстрація: ' + EVENT.title;
     $('organizerName').textContent = EVENT.organizer;
     $('organizerLine').hidden = !EVENT.organizer;
@@ -283,6 +299,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       el.textContent = EVENT.organizer ? 'Організатор: ' + EVENT.organizer : '';
       el.hidden = !EVENT.organizer;
     });
+    document.querySelectorAll('.ticket-org').forEach(el => el.hidden = !EVENT.organizer);
     if (EVENT.background) {
       // своя картинка з event.json (поверх — напівпрозорий шар, щоб текст читався)
       document.documentElement.style.setProperty('--photo', 'url("' + encodeURI(EVENT.background).replace(/"/g, '%22') + '")');
@@ -346,18 +363,25 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     return many;
   }
   function setSeats(left) {
+    const prev = state.left;
     state.left = (left === undefined) ? state.left : left;
-    const el = $('seats');
-    if (state.left === null || state.left === undefined) { el.hidden = true; }
-    else {
+    [$('seats'), $('seatsTop')].forEach(el => {
+      if (state.left === null || state.left === undefined) { el.hidden = true; return; }
+      const wasHidden = el.hidden;
       el.hidden = false;
-      el.textContent = 'Вільних місць: ' + state.left;
-      el.classList.toggle('low', state.left <= 10);
-    }
+      el.textContent = state.left > 0
+        ? 'Вільних місць: ' + state.left
+        : 'Вільних місць немає';
+      el.classList.toggle('low', state.left > 0 && state.left <= 10);
+      el.classList.toggle('none', state.left === 0);
+      if (wasHidden || prev !== state.left) replay(el, 'pop');
+    });
     $('closedNote').hidden = state.left !== 0;
     $('moreKids').hidden = state.left === 0;
   }
-  call('status', {}).then(r => setSeats(r.left)).catch(() => {});
+  function refreshSeats() { return call('status', {}).then(r => setSeats(r.left)).catch(() => {}); }
+  refreshSeats();
+  setInterval(() => { if (!document.hidden && !$('phoneView').hidden) refreshSeats(); }, 30000);
 
   // ---------- Крок 1 ----------
   $('phoneForm').onsubmit = async (e) => {
