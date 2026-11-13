@@ -378,6 +378,26 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     });
     $('closedNote').hidden = state.left !== 0;
     $('moreKids').hidden = state.left === 0;
+    updateChildLimit();
+  }
+
+  // Скільки дітей зараз у формі (без тих, що зникають з анімацією)
+  function childRows() { return [...childrenBox.children].filter(r => !r.classList.contains('leave')); }
+
+  // Не даємо додати більше дітей, ніж вільних місць
+  function updateChildLimit() {
+    const btn = $('addChild');
+    if (!btn) return;
+    const left = (state.left === null || state.left === undefined) ? Infinity : state.left;
+    const n = childRows().length;
+    const full = n >= left;
+    btn.disabled = full;
+    btn.textContent = full ? 'Більше вільних місць немає' : '+ Додати ще дитину';
+    if ($('formView').hidden) return;
+    if (left === 0) showError($('error'), 'На жаль, вільних місць більше немає. Реєстрацію закрито.');
+    else if (n > left) showError($('error'), 'Залишилося лише ' + left + ' ' + plural(left, 'місце', 'місця', 'місць') +
+                                  '. Приберіть зайвих дітей із заявки.');
+    else if (/місц/.test($('error').textContent)) showError($('error'), '');
   }
   function refreshSeats() { return call('status', {}).then(r => setSeats(r.left)).catch(() => {}); }
   refreshSeats();
@@ -423,7 +443,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     del.onclick = () => {
       if (childrenBox.children.length > 1) {
         row.classList.add('leave');
-        setTimeout(() => row.remove(), 220);
+        updateChildLimit();
+        setTimeout(() => { row.remove(); updateChildLimit(); }, 220);
       } else { input.value = ''; replay(input, 'shake'); }
     };
     row.append(input, del);
@@ -431,7 +452,13 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     replay(row, 'enter');
     return input;
   }
-  $('addChild').onclick = () => addChild().focus();
+  $('addChild').onclick = () => {
+    const left = (state.left === null || state.left === undefined) ? Infinity : state.left;
+    if (childRows().length >= left) { updateChildLimit(); return; }
+    addChild().focus();
+    updateChildLimit();
+    refreshSeats();          // перерахунок: хтось міг щойно зайняти місця
+  };
 
   function openForm() {
     $('phoneShown').textContent = state.phone;
@@ -445,10 +472,12 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       : 'Заповніть дані — після цього з’явиться QR-код для входу.';
     setBusy($('submit'), false, 'Зареєструватися');
     show('formView');
+    updateChildLimit();
+    refreshSeats();
     (state.guardian ? childrenBox.querySelector('input') : $('guardian')).focus();
   }
 
-  $('changePhone').onclick = () => { show('phoneView'); $('phone').focus(); };
+  $('changePhone').onclick = () => { show('phoneView'); $('phone').focus(); refreshSeats(); };
 
   $('form').onsubmit = async (e) => {
     e.preventDefault();
@@ -504,6 +533,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     $('phone').value = '';
     show('phoneView');
     $('phone').focus();
+    refreshSeats();
   };
 </script>
 </body>
