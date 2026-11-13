@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Отметка прихода</title>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #EEF3FF; --surface: #FFFFFF; --ink: #1D2748; --muted: #5B6585;
+    --line: #D4DCF2; --primary: #2F5BEA; --primary-ink: #FFFFFF;
+    --ok: #1F9D63; --ok-soft: #DDF5E9; --sun: #FFC83D; --error: #C2372F;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121830; --surface: #1C2442; --ink: #E8ECFA; --muted: #A3ADCC;
+      --line: #2F3A62; --primary: #7C9BFF; --primary-ink: #0E1430;
+      --ok: #4FD69A; --ok-soft: #173A2E; --sun: #FFC83D; --error: #FF8A80;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 500 17px/1.5 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+  main { max-width: 460px; margin: 0 auto; padding: 24px 18px 48px; }
+  h1 { font-size: 26px; line-height: 1.2; font-weight: 800; margin: 0 0 4px; }
+  .muted { color: var(--muted); margin: 0; }
+  input {
+    width: 100%; font: inherit; color: var(--ink); background: var(--surface);
+    border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px;
+  }
+  input:focus { outline: none; border-color: var(--primary); }
+  .row { display: flex; gap: 8px; margin-top: 12px; }
+  .row input { flex: 1; }
+  button { font: inherit; font-weight: 800; cursor: pointer; border-radius: 12px; }
+  button:focus-visible, label.kid:focus-within { outline: 3px solid var(--sun); outline-offset: 2px; }
+  .primary { border: 0; background: var(--primary); color: var(--primary-ink); padding: 14px 18px; }
+  .primary.wide { width: 100%; font-size: 18px; padding: 16px; margin-top: 16px; }
+  .primary:disabled { opacity: .6; cursor: wait; }
+  .ghost { border: 2px solid var(--line); background: var(--surface); color: var(--ink); padding: 12px 16px; }
+  .ghost.wide { width: 100%; margin-top: 10px; }
+  .error { color: var(--error); font-weight: 700; margin-top: 12px; min-height: 1.5em; }
+
+  /* Сканер */
+  .scanner { margin-top: 16px; }
+  .viewfinder {
+    position: relative; aspect-ratio: 1; border-radius: 20px; overflow: hidden;
+    background: #000; border: 6px solid var(--sun);
+  }
+  .viewfinder video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .viewfinder .frame {
+    position: absolute; inset: 18%; border: 3px solid rgba(255,255,255,.85); border-radius: 18px;
+    box-shadow: 0 0 0 999px rgba(0,0,0,.35);
+  }
+  .scan-status { text-align: center; color: var(--muted); margin-top: 8px; min-height: 1.5em; }
+
+  .family { margin-top: 22px; }
+  .contact { margin: 4px 0 16px; }
+  .contact a { color: var(--primary); font-weight: 700; text-decoration: none; }
+
+  label.kid {
+    display: flex; align-items: center; gap: 14px; background: var(--surface);
+    border: 2px solid var(--line); border-radius: 16px; padding: 16px; margin-bottom: 10px;
+    cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  label.kid input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .box {
+    flex: 0 0 34px; height: 34px; border-radius: 10px; border: 2px solid var(--line);
+    display: grid; place-items: center; font-size: 22px; color: transparent;
+  }
+  .kid-name { font-size: 21px; font-weight: 800; line-height: 1.2; }
+  .kid-time { font-size: 14px; color: var(--muted); }
+  label.kid.on { background: var(--ok-soft); border-color: var(--ok); }
+  label.kid.on .box { background: var(--ok); border-color: var(--ok); color: #fff; }
+
+  .bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .link-btn { background: none; border: 0; color: var(--primary); padding: 6px 0; }
+  .saved { color: var(--ok); font-weight: 800; text-align: center; margin-top: 12px; min-height: 1.5em; }
+  .footer { margin-top: 28px; padding-top: 14px; border-top: 2px dashed var(--line); }
+  #photoInput { display: none; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { label.kid { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <!-- Вход по ПИН -->
+  <section id="pinView" hidden>
+    <h1>Отметка прихода</h1>
+    <p class="muted">Эта страница для сотрудников. Если вы родитель — покажите QR-код на входе.</p>
+    <form id="pinForm" class="row">
+      <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="ПИН сотрудника" aria-label="ПИН сотрудника">
+      <button class="primary" type="submit">Войти</button>
+    </form>
+    <div class="error" id="pinError" role="alert"></div>
+  </section>
+
+  <!-- Рабочий экран -->
+  <section id="workView" hidden>
+    <h1>Отметка прихода</h1>
+
+    <button class="primary wide" id="scanBtn" type="button">Сканировать QR</button>
+
+    <div class="scanner" id="scanner" hidden>
+      <div class="viewfinder">
+        <video id="video" playsinline muted></video>
+        <div class="frame"></div>
+      </div>
+      <div class="scan-status" id="scanStatus" role="status">Наведите камеру на QR-код</div>
+      <button class="ghost wide" id="stopBtn" type="button">Закрыть камеру</button>
+    </div>
+
+    <button class="ghost wide" id="photoBtn" type="button">Сфотографировать QR</button>
+    <input id="photoInput" type="file" accept="image/*" capture="environment">
+
+    <form id="searchForm" class="row">
+      <input id="phone" type="tel" inputmode="tel" placeholder="Или номер: 067 123 45 67" aria-label="Номер телефона">
+      <button class="ghost" type="submit">Найти</button>
+    </form>
+    <div class="error" id="error" role="alert"></div>
+
+    <div class="family" id="family" hidden>
+      <h1 id="guardian"></h1>
+      <p class="contact"><a id="phoneLink" href="#"></a></p>
+      <div class="bar">
+        <span class="muted">Отметьте, кто пришёл</span>
+        <button class="link-btn" type="button" id="all">Отметить всех</button>
+      </div>
+      <div id="kids"></div>
+      <button class="primary wide" id="save">Сохранить отметки</button>
+      <div class="saved" id="saved" role="status"></div>
+    </div>
+
+    <div class="footer"><button class="link-btn" type="button" id="logout">Выйти</button></div>
+  </section>
+
+  <canvas id="canvas" hidden></canvas>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+  // ↓↓↓ Вставьте ссылку веб-приложения Apps Script (заканчивается на /exec)
+  const API_URL = 'https://script.google.com/macros/s/ВАШ_ID/exec';
+
+  const START_CODE = (new URLSearchParams(location.search).get('c') || '').replace(/[^A-Za-z0-9]/g, '');
+  let PIN = '';
+  let current = null;
+
+  const $ = id => document.getElementById(id);
+  const msg = ex => String(ex && ex.message || ex).replace(/^Error:\s*/, '');
+  const store = {
+    get() { try { return localStorage.getItem('staffPin') || ''; } catch (e) { return ''; } },
+    set(v) { try { v ? localStorage.setItem('staffPin', v) : localStorage.removeItem('staffPin'); } catch (e) {} }
+  };
+
+  const ARGS = {
+    checkPin: ['pin'], getFamily: ['code', 'pin'],
+    findByPhone: ['phone', 'pin'], saveArrivals: ['code', 'ids', 'pin']
+  };
+  async function call(fn, ...args) {
+    const body = { action: fn };
+    ARGS[fn].forEach((k, i) => { body[k] = args[i]; });
+    let res;
+    try {
+      // без заголовка Content-Type — так запрос проходит к Apps Script без CORS-ошибок
+      res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(body) });
+    } catch (e) {
+      throw new Error('Нет связи с таблицей. Проверьте интернет.');
+    }
+    const json = await res.json().catch(() => null);
+    if (!json) throw new Error('Неожиданный ответ сервера. Проверьте API_URL и доступ «Все» в развертывании.');
+    if (!json.ok) throw new Error(json.error);
+    return json.data;
+  }
+
+  // ---------- Вход ----------
+  async function start() {
+    PIN = store.get();
+    if (PIN) {
+      try { await call('checkPin', PIN); return enter(); }
+      catch (e) { store.set(''); PIN = ''; }
+    }
+    $('pinView').hidden = false;
+    $('pin').focus();
+  }
+
+  $('pinForm').onsubmit = async (e) => {
+    e.preventDefault();
+    $('pinError').textContent = '';
+    const v = $('pin').value.trim();
+    try { await call('checkPin', v); PIN = v; store.set(v); $('pinView').hidden = true; enter(); }
+    catch (ex) { $('pinError').textContent = msg(ex); }
+  };
+
+  function enter() {
+    $('workView').hidden = false;
+    if (START_CODE) load(call('getFamily', START_CODE, PIN));
+  }
+
+  // ---------- Сканер камерой ----------
+  let stream = null, scanning = false;
+  const video = $('video'), canvas = $('canvas'), ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  // Из QR достаём код семьи: ссылка ...?c=КОД или просто КОД
+  function codeFromText(text) {
+    let c = '';
+    try { c = new URL(text).searchParams.get('c') || ''; } catch (e) { c = text; }
+    c = String(c).trim();
+    return /^[A-Za-z0-9]{6,40}$/.test(c) ? c : '';
+  }
+
+  async function startScan() {
+    $('error').textContent = '';
+    $('family').hidden = true;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      $('error').textContent = 'Камера в этом браузере недоступна. Нажмите «Сфотографировать QR».';
+      return;
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 1280 } },
+        audio: false
+      });
+    } catch (e) {
+      $('error').textContent = e && e.name === 'NotAllowedError'
+        ? 'Доступ к камере запрещён. В Safari: «аА» → «Настройки веб-сайта» → «Камера» → «Разрешить», затем обновите страницу.'
+        : 'Камера не запустилась (' + (e && e.name || 'ошибка') + '). Нажмите «Сфотографировать QR».';
+      return;
+    }
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+    $('scanner').hidden = false;
+    $('scanBtn').hidden = true;
+    $('scanStatus').textContent = 'Наведите камеру на QR-код';
+    scanning = true;
+    requestAnimationFrame(tick);
+  }
+
+  function stopScan() {
+    scanning = false;
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = null;
+    video.srcObject = null;
+    $('scanner').hidden = true;
+    $('scanBtn').hidden = false;
+  }
+
+  function decodeFrom(source, w, h) {
+    const scale = Math.min(1, 800 / Math.max(w, h));
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const res = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
+    return res ? res.data : '';
+  }
+
+  function tick() {
+    if (!scanning) return;
+    if (video.readyState >= 2 && video.videoWidth) {
+      const text = decodeFrom(video, video.videoWidth, video.videoHeight);
+      if (text) {
+        const code = codeFromText(text);
+        if (code) {
+          if (navigator.vibrate) navigator.vibrate(80);
+          stopScan();
+          load(call('getFamily', code, PIN));
+          return;
+        }
+        $('scanStatus').textContent = 'Это не наш QR-код';
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  $('scanBtn').onclick = startScan;
+  $('stopBtn').onclick = stopScan;
+
+  // ---------- Запасной вариант: фото QR ----------
+  $('photoBtn').onclick = () => { stopScan(); $('photoInput').click(); };
+  $('photoInput').onchange = () => {
+    const file = $('photoInput').files[0];
+    $('photoInput').value = '';
+    if (!file) return;
+    $('error').textContent = '';
+    const img = new Image();
+    img.onload = () => {
+      const text = decodeFrom(img, img.naturalWidth, img.naturalHeight);
+      URL.revokeObjectURL(img.src);
+      const code = text && codeFromText(text);
+      if (code) load(call('getFamily', code, PIN));
+      else $('error').textContent = 'QR-код на фото не найден. Снимите ближе и ровнее.';
+    };
+    img.onerror = () => { $('error').textContent = 'Не удалось открыть фото.'; };
+    img.src = URL.createObjectURL(file);
+  };
+
+  // ---------- Поиск по телефону ----------
+  $('searchForm').onsubmit = (e) => {
+    e.preventDefault();
+    stopScan();
+    load(call('findByPhone', $('phone').value, PIN));
+  };
+
+  // ---------- Карточка семьи ----------
+  async function load(promise) {
+    $('error').textContent = ''; $('saved').textContent = '';
+    try { render(await promise); }
+    catch (ex) { $('family').hidden = true; $('error').textContent = msg(ex); }
+  }
+
+  function render(f) {
+    current = f;
+    $('family').hidden = false;
+    $('guardian').textContent = f.guardian;
+    $('phoneLink').textContent = f.phone;
+    $('phoneLink').href = 'tel:' + f.phone;
+    const box = $('kids');
+    box.innerHTML = '';
+    f.children.forEach(k => {
+      const label = document.createElement('label');
+      label.className = 'kid' + (k.arrivedAt ? ' on' : '');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.value = k.id; cb.checked = !!k.arrivedAt;
+      cb.onchange = () => { label.classList.toggle('on', cb.checked); $('saved').textContent = ''; };
+      const mark = document.createElement('span'); mark.className = 'box'; mark.textContent = '✓';
+      const text = document.createElement('span');
+      const name = document.createElement('div'); name.className = 'kid-name'; name.textContent = k.name;
+      const time = document.createElement('div'); time.className = 'kid-time';
+      time.textContent = k.arrivedAt ? 'Пришёл(ла) в ' + k.arrivedAt : 'Ещё не отмечен(а)';
+      text.append(name, time);
+      label.append(cb, mark, text);
+      box.append(label);
+    });
+    $('family').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  $('all').onclick = () => {
+    $('kids').querySelectorAll('input').forEach(cb => { cb.checked = true; cb.onchange(); });
+  };
+
+  $('save').onclick = async () => {
+    const btn = $('save');
+    const ids = [...$('kids').querySelectorAll('input:checked')].map(cb => cb.value);
+    btn.disabled = true; btn.textContent = 'Сохраняем…';
+    try {
+      render(await call('saveArrivals', current.code, ids, PIN));
+      $('saved').textContent = 'Отметки сохранены';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (ex) { $('error').textContent = msg(ex); }
+    btn.disabled = false; btn.textContent = 'Сохранить отметки';
+  };
+
+  $('logout').onclick = () => {
+    stopScan();
+    store.set(''); PIN = ''; current = null;
+    $('workView').hidden = true; $('family').hidden = true;
+    $('pin').value = ''; $('pinView').hidden = false;
+  };
+
+  start();
+</script>
+</body>
+</html>
