@@ -162,6 +162,11 @@
     margin: 0 0 18px; padding: 12px 14px; border-radius: 12px;
     border: 2px solid var(--error); color: var(--error); font-weight: 700;
   }
+  .boot {
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    padding: 70px 0; color: var(--muted); font-weight: 700; text-align: center;
+  }
+  .boot .spinner { width: 44px; height: 44px; border-width: 4px; margin: 0; color: var(--primary); }
   [hidden] { display: none !important; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
@@ -172,7 +177,9 @@
 <body>
 <main>
   <!-- Крок 1: номер телефону -->
-  <section id="phoneView">
+  <div class="boot" id="boot" role="status"><span class="spinner" aria-hidden="true"></span>Перевіряємо вільні місця…</div>
+
+  <section id="phoneView" hidden>
     <div class="event" style="visibility:hidden">
       <p class="event-kicker">Реєстрація на захід</p>
       <h1 id="eventTitle"></h1>
@@ -310,7 +317,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     replay(box, 'enter');
   }
 
-  fetch('event.json', { cache: 'no-cache' })
+  const eventReady = fetch('event.json', { cache: 'no-cache' })
     .then(r => r.ok ? r.json() : Promise.reject(r.status))
     .then(applyEvent)
     .catch(() => applyEvent({}));
@@ -400,7 +407,12 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     else if (/місц/.test($('error').textContent)) showError($('error'), '');
   }
   function refreshSeats() { return call('status', {}).then(r => setSeats(r.left)).catch(() => {}); }
-  refreshSeats();
+  const seatsReady = refreshSeats();
+  const timeout = new Promise(r => setTimeout(r, 15000));   // запобіжник, якщо сервер не відповідає
+  Promise.race([Promise.all([eventReady, seatsReady]), timeout]).then(() => {
+    $('boot').hidden = true;
+    show('phoneView');
+  });
   setInterval(() => { if (!document.hidden && !$('phoneView').hidden) refreshSeats(); }, 30000);
 
   // ---------- Крок 1 ----------
