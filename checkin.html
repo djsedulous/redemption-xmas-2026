@@ -234,6 +234,30 @@
   .dialog p { margin: 0 0 18px; color: var(--muted); }
   .dialog .row { margin: 0; }
   .dialog .row button { flex: 1; }
+  /* Скелетони та оновлення даних */
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+  .skeleton, .sk-wrap.loading .sk {
+    color: transparent !important; border-color: transparent !important; user-select: none;
+    background: linear-gradient(90deg, var(--line) 25%, var(--bg) 50%, var(--line) 75%) !important;
+    background-size: 200% 100% !important; animation: shimmer 1.2s linear infinite; border-radius: 8px;
+  }
+  .updating { animation: pulse 1s ease-in-out infinite; }
+  .stats.loading .stat b {
+    align-self: center; width: 54px; color: transparent;
+    background: linear-gradient(90deg, var(--line) 25%, var(--surface) 50%, var(--line) 75%);
+    background-size: 200% 100%; animation: shimmer 1.2s linear infinite; border-radius: 8px;
+  }
+  .stats.loading .stat b small { visibility: hidden; }
+  .event-line.loading .ev-title, .event-line.loading .ev-when, .event-line.loading .ev-where {
+    display: inline-block; color: transparent; height: 1.15em; border-radius: 8px; padding: 0;
+    background: linear-gradient(90deg, var(--line) 25%, var(--bg) 50%, var(--line) 75%);
+    background-size: 200% 100%; animation: shimmer 1.2s linear infinite;
+  }
+  .event-line.loading .ev-title { width: 190px; }
+  .event-line.loading .ev-when { width: 110px; }
+  .event-line.loading .ev-where { width: 240px; flex-basis: auto; }
+  input.skeleton::placeholder { color: transparent; }
   [hidden] { display: none !important; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
@@ -250,7 +274,7 @@
   <!-- Вхід за ПІН -->
   <section id="pinView" hidden>
     <h1>Відмітка приходу</h1>
-    <p class="event-line" hidden><span class="ev-title"></span><span class="ev-when"></span><span class="ev-where"></span></p>
+    <p class="event-line loading" aria-busy="true"><span class="ev-title"></span><span class="ev-when"></span><span class="ev-where"></span></p>
     <p class="muted">Ця сторінка для працівників. Якщо ви батьки — покажіть QR-код на вході.</p>
     <form id="pinForm" class="row">
       <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="ПІН працівника" aria-label="ПІН працівника">
@@ -262,7 +286,7 @@
   <!-- Робочий екран -->
   <section id="workView" hidden>
     <h1>Відмітка приходу<span class="role" id="roleBadge" hidden>Адміністратор</span></h1>
-    <p class="event-line" hidden><span class="ev-title"></span><span class="ev-when"></span><span class="ev-where"></span></p>
+    <p class="event-line loading" aria-busy="true"><span class="ev-title"></span><span class="ev-when"></span><span class="ev-where"></span></p>
 
     <div class="stats" id="stats" hidden aria-live="polite">
       <div class="stat"><b id="stReg">–</b><span>зареєстровано</span></div>
@@ -472,12 +496,27 @@
   }
 
   // ---------- Статистика ----------
+  let statsLoaded = false;
   function loadStats() {
-    return call('stats', PIN).then(renderStats).catch(() => {});
+    const box = $('stats');
+    box.hidden = false; $('stProgress').hidden = false;
+    if (!statsLoaded) {
+      box.classList.add('loading'); box.setAttribute('aria-busy', 'true');
+      $('limitInput').classList.add('skeleton'); $('limitInput').disabled = true;
+    } else {
+      box.classList.add('updating'); $('stProgress').classList.add('updating');
+    }
+    return call('stats', PIN).then(renderStats).catch(() => {}).finally(() => {
+      box.classList.remove('loading', 'updating'); box.removeAttribute('aria-busy');
+      $('stProgress').classList.remove('updating');
+      $('limitInput').classList.remove('skeleton'); $('limitInput').disabled = false;
+    });
   }
   function renderStats(s) {
     if (!s) return;
-    const first = $('stats').hidden;
+    const first = !statsLoaded;
+    statsLoaded = true;
+    $('stats').classList.remove('loading');
     $('stats').hidden = false;
     $('stProgress').hidden = false;
     $('stReg').innerHTML = '';
@@ -550,12 +589,14 @@
     showError($('limitError'), '');
     const v = $('limitInput').value.trim();
     setBusy($('limitBtn'), true, 'Зберігаю…');
+    $('stats').classList.add('updating');
     try {
       renderStats(await call('setLimit', v === '' ? '' : Number(v), PIN));
       toast(v === '' ? 'Ліміт знято' : 'Ліміт: ' + v);
     } catch (ex) {
       showError($('limitError'), msg(ex));
     }
+    $('stats').classList.remove('updating');
     setBusy($('limitBtn'), false, 'Зберегти');
   };
 
@@ -827,7 +868,7 @@
 
   $('logout').onclick = () => {
     stopScan();
-    store.set(''); PIN = ''; current = null; ROLE = '';
+    store.set(''); PIN = ''; current = null; ROLE = ''; statsLoaded = false;
     clearInterval(statsTimer);
     $('workView').hidden = true; $('family').hidden = true;
     $('adminPanel').hidden = true; $('stats').hidden = true; $('stProgress').hidden = true;
@@ -855,12 +896,13 @@
           wh.append(a);
         }
         wh.hidden = !where;
+        p.classList.remove('loading'); p.removeAttribute('aria-busy');
         p.hidden = !(ev.title || when || where);
         replay(p, 'enter');
       });
       if (ev.title) document.title = 'Відмітка приходу: ' + ev.title;
     })
-    .catch(() => {});
+    .catch(() => document.querySelectorAll('.event-line').forEach(p => p.hidden = true));
 
   start();
 </script>
