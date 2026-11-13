@@ -169,10 +169,11 @@
   .boot .spinner { width: 44px; height: 44px; border-width: 4px; margin: 0; color: var(--primary); }
   input[readonly] { background: var(--bg); color: var(--muted); cursor: not-allowed; }
   .field-note { color: var(--muted); font-size: 14px; margin: 6px 0 0; }
-  .kids li { display: flex; flex-direction: column; align-items: center; margin-bottom: 8px; }
-  .kid-status { font-size: 13px; font-weight: 800; border-radius: 999px; padding: 1px 10px; margin-top: 2px; }
-  .kid-status.in { background: #DDF5E9; color: #137A45; }
-  .kid-status.wait { background: #EEF1FA; color: #5B6585; font-weight: 700; }
+  .kids li { display: flex; justify-content: center; align-items: center; gap: 8px; }
+  .kid-check {
+    display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+    background: #1F9D63; color: #FFFFFF; font-size: 15px; line-height: 1;
+  }
   [hidden] { display: none !important; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
@@ -553,11 +554,15 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       const li = document.createElement('li');
       const name = document.createElement('span');
       name.textContent = typeof c === 'string' ? c : c.name;
-      const st = document.createElement('span');
-      const at = typeof c === 'string' ? '' : c.arrivedAt;
-      st.className = 'kid-status ' + (at ? 'in' : 'wait');
-      st.textContent = at ? '✓ Прийшов(ла) о ' + at : 'Ще не прийшов(ла)';
-      li.append(name, st);
+      li.append(name);
+      if (typeof c !== 'string' && c.arrivedAt) {
+        const ok = document.createElement('span');
+        ok.className = 'kid-check';
+        ok.textContent = '✓';
+        ok.title = 'Відмічено о ' + c.arrivedAt;
+        ok.setAttribute('aria-label', 'відмічено');
+        li.append(ok);
+      }
       li.className = 'enter';
       li.style.animationDelay = (350 + i * 90) + 'ms';
       ul.append(li);
