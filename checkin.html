@@ -171,6 +171,12 @@
     width: calc(100% - 24px); margin: 128px auto 250px;
     border-radius: 24px; box-shadow: 0 18px 50px rgba(15, 5, 50, .45);
   }
+  .event-line { margin: 0 0 12px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+  .event-line .ev-title { font-weight: 800; }
+  .event-line .ev-when {
+    background: var(--sun); color: #1D2748; font-weight: 800; font-size: 15px;
+    border-radius: 10px; padding: 2px 10px;
+  }
   [hidden] { display: none !important; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
@@ -187,6 +193,7 @@
   <!-- Вхід за ПІН -->
   <section id="pinView" hidden>
     <h1>Відмітка приходу</h1>
+    <p class="event-line" hidden><span class="ev-title"></span><span class="ev-when"></span></p>
     <p class="muted">Ця сторінка для працівників. Якщо ви батьки — покажіть QR-код на вході.</p>
     <form id="pinForm" class="row">
       <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="ПІН працівника" aria-label="ПІН працівника">
@@ -198,6 +205,7 @@
   <!-- Робочий екран -->
   <section id="workView" hidden>
     <h1>Відмітка приходу</h1>
+    <p class="event-line" hidden><span class="ev-title"></span><span class="ev-when"></span></p>
 
     <button class="primary wide" id="scanBtn" type="button">Сканувати QR</button>
 
@@ -582,6 +590,22 @@
     $('pin').value = '';
     reveal($('pinView'));
   };
+
+  // ---------- Назва, дата й час заходу з event.json ----------
+  fetch('event.json', { cache: 'no-cache' })
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(ev => {
+      const when = [ev.date, ev.time].filter(Boolean).join(' ');
+      document.querySelectorAll('.event-line').forEach(p => {
+        p.querySelector('.ev-title').textContent = ev.title || '';
+        const w = p.querySelector('.ev-when');
+        w.textContent = when; w.hidden = !when;
+        p.hidden = !(ev.title || when);
+        replay(p, 'enter');
+      });
+      if (ev.title) document.title = 'Відмітка приходу: ' + ev.title;
+    })
+    .catch(() => {});
 
   start();
 </script>
