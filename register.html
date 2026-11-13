@@ -212,10 +212,10 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
   function applyEvent(ev) {
     EVENT = Object.assign({}, EVENT_DEFAULTS, ev);
-    const when = [EVENT.date, EVENT.time && ('о ' + EVENT.time)].filter(Boolean);
+    const when = [EVENT.date, EVENT.time].filter(Boolean);
     $('eventTitle').textContent = EVENT.title;
     $('eventDate').textContent = EVENT.date;
-    $('eventTime').textContent = EVENT.time ? 'о ' + EVENT.time : '';
+    $('eventTime').textContent = EVENT.time;
     document.querySelector('.when').hidden = !when.length;
     $('venuePlace').textContent = EVENT.place;
     $('venueAddress').textContent = EVENT.address;
